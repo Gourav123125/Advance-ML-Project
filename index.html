@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Smart Traffic RL System</title>
+<style>
+body { font-family: Arial; text-align: center; background:#f4f4f4; }
+canvas { background:#ddd; margin:10px; border-radius:10px; }
+button { padding:10px; margin:5px; }
+</style>
+</head>
+
+<body>
+
+<h2>RL Traffic Intersection</h2>
+
+<canvas id="road" width="600" height="400"></canvas>
+
+<br>
+<button onclick="start()">Start</button>
+<button onclick="pause()">Pause</button>
+<button onclick="reset()">Reset</button>
+
+Speed: <input type="range" min="100" max="1000" value="400" id="speed">
+
+<p id="info"></p>
+
+<canvas id="graph" width="600" height="200"></canvas>
+
+<script>
+
+// -------- RL SETUP --------
+let Q = Array.from({length: 11}, () => [0,0]);
+
+let alpha=0.5, gamma=0.9, epsilon=0.2;
+let history=[];
+
+for(let ep=0; ep<300; ep++){
+    let state = Math.floor(Math.random()*10);
+    let total=0;
+
+    for(let step=0; step<10; step++){
+        let action = Math.random()<epsilon ? Math.floor(Math.random()*2)
+                     : (Q[state][0] > Q[state][1] ? 0 : 1);
+
+        let next = Math.max(0, state - (action?2:0));
+        let reward = -next;
+
+        Q[state][action] += alpha * (reward + gamma*Math.max(...Q[next]) - Q[state][action]);
+
+        total += reward;
+        state = next;
+    }
+    history.push(total);
+}
+
+// -------- CANVAS --------
+let canvas = document.getElementById("road");
+let ctx = canvas.getContext("2d");
+
+let carsH = [], carsV = [];
+let state = 10;
+let running = false;
+let step = 0;
+
+function initCars(n){
+    carsH = [];
+    carsV = [];
+
+    for(let i=0;i<n;i++){
+        carsH.push({x:50+i*40, y:190});
+        carsV.push({x:290, y:50+i*40});
+    }
+}
+
+// -------- DRAW --------
+function draw(){
+    ctx.clearRect(0,0,600,400);
+
+    // roads
+    ctx.fillStyle="black";
+    ctx.fillRect(0,180,600,40);
+    ctx.fillRect(260,0,40,400);
+
+    // signal
+    let action = Q[state][0] > Q[state][1] ? 0 : 1;
+    ctx.fillStyle = action ? "green":"red";
+    ctx.beginPath();
+    ctx.arc(300,170,15,0,Math.PI*2);
+    ctx.fill();
+
+    // horizontal cars
+    ctx.fillStyle="blue";
+    carsH.forEach(c=> ctx.fillRect(c.x,c.y,30,20));
+
+    // vertical cars
+    ctx.fillStyle="orange";
+    carsV.forEach(c=> ctx.fillRect(c.x,c.y,20,30));
+}
+
+// -------- UPDATE --------
+function update(){
+    if(!running) return;
+
+    if(state===0){
+        document.getElementById("info").innerText="Traffic Cleared ✅";
+        running=false;
+        return;
+    }
+
+    let action = Q[state][0] > Q[state][1] ? 0 : 1;
+    let actionText = action ? "GREEN (H road moves)" : "RED (V road moves)";
+
+    document.getElementById("info").innerText =
+        `Step ${step} | Cars: ${state} | ${actionText}`;
+
+    if(action){
+        carsH.forEach(c=> c.x += 20);
+        carsH = carsH.filter(c=> c.x < 600);
+    } else {
+        carsV.forEach(c=> c.y += 20);
+        carsV = carsV.filter(c=> c.y < 400);
+    }
+
+    state = Math.max(0, state - 1);
+
+    if(carsH.length < state){
+        carsH.push({x:50,y:190});
+        carsV.push({x:290,y:50});
+    }
+
+    draw();
+    drawGraph();
+
+    step++;
+
+    setTimeout(update, document.getElementById("speed").value);
+}
+
+// -------- GRAPH --------
+let g = document.getElementById("graph").getContext("2d");
+
+function drawGraph(){
+    g.clearRect(0,0,600,200);
+
+    g.beginPath();
+    g.moveTo(0,100);
+
+    history.slice(-100).forEach((r,i)=>{
+        g.lineTo(i*6, 100 - r);
+    });
+
+    g.strokeStyle="blue";
+    g.stroke();
+}
+
+// -------- CONTROLS --------
+function start(){ running=true; update(); }
+function pause(){ running=false; }
+function reset(){
+    running=false;
+    state=10;
+    step=0;
+    initCars(state);
+    draw();
+}
+
+initCars(state);
+draw();
+
+</script>
+
+</body>
+</html>
